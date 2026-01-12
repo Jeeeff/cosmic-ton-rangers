@@ -1,12 +1,12 @@
+
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Shop from './pages/Shop';
-import Rangers from './pages/Rangers';
-import Missions from './pages/Missions';
-import Marketplace from './pages/Marketplace';
-import Profile from './pages/Profile';
 import FarmProgress from './pages/FarmProgress';
+import Economics from './pages/Economics';
+import Stats from './pages/Stats';
+import Inventory from './pages/Inventory';
 
 function App() {
   return (
@@ -16,11 +16,10 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
-          <Route path="/rangers" element={<Rangers />} />
-          <Route path="/missions" element={<Missions />} />
-          <Route path="/marketplace" element={<Marketplace />} />
-          <Route path="/profile" element={<Profile />} />
           <Route path="/farm" element={<FarmProgress />} />
+          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/economics" element={<Economics />} />
+          <Route path="/stats" element={<Stats />} />
         </Routes>
       </div>
     </Router>

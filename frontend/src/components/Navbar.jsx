@@ -13,17 +13,15 @@ export default function Navbar() {
     { path: '/', label: 'Início', icon: '🏠' },
     { path: '/shop', label: 'Loja', icon: '🛒' },
     { path: '/farm', label: 'Farm', icon: '🌾' },
-    { path: '/rangers', label: 'Rangers', icon: '👥' },
-    { path: '/missions', label: 'Missões', icon: '🎯' },
-    { path: '/marketplace', label: 'Mercado', icon: '💰' },
-    { path: '/profile', label: 'Perfil', icon: '👤' }
+    { path: '/inventory', label: 'Inventário', icon: '🎒' },
+    { path: '/economics', label: 'Economia', icon: '📊' },
+    { path: '/stats', label: 'Stats', icon: '📈' }
   ];
 
   return (
     <nav className="bg-black/50 backdrop-blur-md border-b border-purple-500/30 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <Link to="/" className="flex items-center space-x-2 group">
             <span className="text-3xl group-hover:scale-110 transition-transform">🚀</span>
             <span className="text-xl font-bold glow-text hidden sm:inline">
@@ -34,7 +32,6 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-1">
             {navLinks.map((link) => (
               <Link
@@ -52,7 +49,6 @@ export default function Navbar() {
             ))}
           </div>
 
-          {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="md:hidden p-2 rounded-lg hover:bg-purple-900/50 transition-colors"
@@ -82,7 +78,6 @@ export default function Navbar() {
           </button>
         </div>
 
-        {/* Mobile Menu */}
         {isMenuOpen && (
           <div className="md:hidden py-4 space-y-2">
             {navLinks.map((link) => (
