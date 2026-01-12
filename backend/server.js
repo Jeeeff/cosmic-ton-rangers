@@ -8,16 +8,24 @@ dotenv.config();
 
 const app = express();
 
-// Middlewares
+// ============================================
+// MIDDLEWARES
+// ============================================
 app.use(cors());
 app.use(express.json());
 
-// Conectar ao MongoDB
+// ============================================
+// CONECTAR AO MONGODB
+// ============================================
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Conectado ao MongoDB'))
   .catch(err => console.error('❌ Erro ao conectar ao MongoDB:', err));
 
-// Schemas
+// ============================================
+// SCHEMAS
+// ============================================
+
+// User Schema
 const userSchema = new mongoose.Schema({
   telegramId: { type: String, required: true, unique: true },
   username: String,
@@ -28,6 +36,7 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Ranger Schema
 const rangerSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   name: { type: String, required: true },
@@ -43,6 +52,7 @@ const rangerSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Transaction Schema
 const transactionSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   type: { type: String, enum: ['purchase', 'claim', 'withdrawal', 'energy'], required: true },
@@ -54,15 +64,56 @@ const transactionSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// FarmProgress Schema
+const farmProgressSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  daysCompleted: { type: Number, default: 0, max: 50 },
+  tonAccumulated: { type: Number, default: 0, max: 2.0 },
+  lastCheckIn: { type: Date, default: null },
+  isActive: { type: Boolean, default: true },
+  usedFarmTON: { type: Boolean, default: false },
+  checkInHistory: [{
+    day: { type: Number, required: true },
+    date: { type: Date, default: Date.now },
+    tonEarned: { type: Number, default: 0.04 }
+  }],
+  deactivatedAt: { type: Date, default: null }
+}, { timestamps: true });
+
+// GlobalStats Schema
+const globalStatsSchema = new mongoose.Schema({
+  totalChestsSold: { type: Number, default: 0 },
+  chestsSoldByType: {
+    cadete: { type: Number, default: 0 },
+    explorador: { type: Number, default: 0 },
+    comandante: { type: Number, default: 0 },
+    elite: { type: Number, default: 0 },
+    estelar: { type: Number, default: 0 },
+    cosmico: { type: Number, default: 0 }
+  },
+  totalRevenue: { type: Number, default: 0 },
+  totalFees: { type: Number, default: 0 },
+  lastUpdated: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+// ============================================
+// MODELS
+// ============================================
 const User = mongoose.model('User', userSchema);
 const Ranger = mongoose.model('Ranger', rangerSchema);
 const Transaction = mongoose.model('Transaction', transactionSchema);
+const FarmProgress = mongoose.model('FarmProgress', farmProgressSchema);
+const GlobalStats = mongoose.model('GlobalStats', globalStatsSchema);
 
-// Constantes do sistema
+// ============================================
+// CONSTANTES DO SISTEMA
+// ============================================
 const TRANSACTION_FEE = 0.01; // 1% de taxa
 const ENERGY_COST_PERCENTAGE = 0.03; // 3% do farm diário
 
-// Middleware de autenticação
+// ============================================
+// MIDDLEWARE DE AUTENTICAÇÃO
+// ============================================
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -80,7 +131,10 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Rotas de autenticação
+// ============================================
+// ROTAS DE AUTENTICAÇÃO
+// ============================================
+
 app.post('/api/auth/telegram', async (req, res) => {
   try {
     const { telegramId, username, firstName, lastName } = req.body;
@@ -123,7 +177,9 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
-// Função para determinar qual Ranger vem no baú
+// ============================================
+// FUNÇÃO PARA DETERMINAR RANGER DO BAÚ
+// ============================================
 function determineRanger(chestType) {
   const random = Math.random() * 100;
 
@@ -165,13 +221,15 @@ function determineRanger(chestType) {
   return options[0]; // Fallback
 }
 
-// Rotas de Rangers
+// ============================================
+// ROTAS DE RANGERS
+// ============================================
+
 app.post('/api/rangers/buy', authenticateToken, async (req, res) => {
   try {
     const { chestType, walletAddress } = req.body;
     const userId = req.user.id;
 
-    // Preços dos baús
     const chestPrices = {
       common: 2,
       rare: 5,
@@ -185,20 +243,12 @@ app.post('/api/rangers/buy', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Tipo de baú inválido' });
     }
 
-    // Calcula preço com taxa de 1%
     const totalPrice = basePrice * (1 + TRANSACTION_FEE);
     const fee = basePrice * TRANSACTION_FEE;
 
-    // Aqui você vai integrar com TON Connect para verificar pagamento
-    // Por enquanto, vamos simular
-
-    // Determina qual Ranger vem no baú
     const rangerData = determineRanger(chestType);
-
-    // Calcula lucro máximo (2x valor base + 10%)
     const maxProfit = (rangerData.baseValue * 2) * 1.1;
 
-    // Cria o Ranger no banco
     const newRanger = new Ranger({
       userId,
       name: `${rangerData.rarity} #${Math.floor(Math.random() * 10000)}`,
@@ -213,7 +263,6 @@ app.post('/api/rangers/buy', authenticateToken, async (req, res) => {
 
     await newRanger.save();
 
-    // Registra a transação
     const transaction = new Transaction({
       userId,
       type: 'purchase',
@@ -225,6 +274,31 @@ app.post('/api/rangers/buy', authenticateToken, async (req, res) => {
     });
 
     await transaction.save();
+
+    // Incrementar estatísticas globais
+    let stats = await GlobalStats.findOne();
+    if (!stats) {
+      stats = await GlobalStats.create({
+        totalChestsSold: 0,
+        chestsSoldByType: {
+          cadete: 0,
+          explorador: 0,
+          comandante: 0,
+          elite: 0,
+          estelar: 0,
+          cosmico: 0
+        },
+        totalRevenue: 0,
+        totalFees: 0
+      });
+    }
+
+    stats.totalChestsSold += 1;
+    stats.chestsSoldByType[chestType] += 1;
+    stats.totalRevenue += basePrice;
+    stats.totalFees += fee;
+    stats.lastUpdated = new Date();
+    await stats.save();
 
     res.json({
       message: 'Ranger comprado com sucesso!',
@@ -249,31 +323,28 @@ app.get('/api/rangers', authenticateToken, async (req, res) => {
   }
 });
 
-// Rota para ativar Ranger (pagar energia)
 app.post('/api/rangers/:id/activate', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
 
     const ranger = await Ranger.findOne({ _id: id, userId });
+
     if (!ranger) {
       return res.status(404).json({ error: 'Ranger não encontrado' });
     }
 
-    // Verifica se o Ranger já atingiu o lucro máximo
     if (ranger.totalEarned >= ranger.maxProfit) {
       return res.status(400).json({ error: 'Ranger atingiu o lucro máximo e se aposentou' });
     }
 
-    // Calcula custo de energia (3% do farm diário)
     const energyCost = ranger.dailyReward * ENERGY_COST_PERCENTAGE;
-
     const user = await User.findById(userId);
+
     if (user.balance < energyCost) {
       return res.status(400).json({ error: 'Saldo insuficiente para pagar energia' });
     }
 
-    // Desconta energia do saldo
     user.balance -= energyCost;
     await user.save();
 
@@ -281,7 +352,6 @@ app.post('/api/rangers/:id/activate', authenticateToken, async (req, res) => {
     ranger.lastActivation = new Date();
     await ranger.save();
 
-    // Registra a transação de energia
     const transaction = new Transaction({
       userId,
       type: 'energy',
@@ -304,13 +374,13 @@ app.post('/api/rangers/:id/activate', authenticateToken, async (req, res) => {
   }
 });
 
-// Rota para fazer claim de recompensas
 app.post('/api/rangers/:id/claim', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
 
     const ranger = await Ranger.findOne({ _id: id, userId });
+
     if (!ranger) {
       return res.status(404).json({ error: 'Ranger não encontrado' });
     }
@@ -319,7 +389,6 @@ app.post('/api/rangers/:id/claim', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Ranger não está ativo' });
     }
 
-    // Verifica se passou 24h desde a última ativação
     const now = new Date();
     const hoursSinceActivation = (now - ranger.lastActivation) / (1000 * 60 * 60);
 
@@ -330,32 +399,27 @@ app.post('/api/rangers/:id/claim', authenticateToken, async (req, res) => {
       });
     }
 
-    // Verifica se o Ranger já atingiu o lucro máximo
     if (ranger.totalEarned >= ranger.maxProfit) {
       ranger.isActive = false;
       await ranger.save();
       return res.status(400).json({ error: 'Ranger atingiu o lucro máximo e se aposentou' });
     }
 
-    // Calcula recompensa (não pode ultrapassar maxProfit)
     let reward = ranger.dailyReward;
     if (ranger.totalEarned + reward > ranger.maxProfit) {
       reward = ranger.maxProfit - ranger.totalEarned;
     }
 
-    // Atualiza saldo do usuário
     const user = await User.findById(userId);
     user.balance += reward;
     user.totalEarned += reward;
     await user.save();
 
-    // Atualiza Ranger
     ranger.totalEarned += reward;
     ranger.lastClaim = now;
-    ranger.isActive = false; // Desativa após 24h
+    ranger.isActive = false;
     await ranger.save();
 
-    // Registra transação
     const transaction = new Transaction({
       userId,
       type: 'claim',
@@ -378,27 +442,26 @@ app.post('/api/rangers/:id/claim', authenticateToken, async (req, res) => {
   }
 });
 
-// Rota para fazer saque (com taxa de 1%)
+// ============================================
+// ROTAS DE TRANSAÇÕES
+// ============================================
+
 app.post('/api/transactions/withdraw', authenticateToken, async (req, res) => {
   try {
     const { amount, walletAddress } = req.body;
     const userId = req.user.id;
 
     const user = await User.findById(userId);
+
     if (user.balance < amount) {
       return res.status(400).json({ error: 'Saldo insuficiente' });
     }
 
-    // Calcula taxa de 1%
     const fee = amount * TRANSACTION_FEE;
     const netAmount = amount - fee;
 
-    // Desconta do saldo
     user.balance -= amount;
     await user.save();
-
-    // Aqui você vai integrar com TON Connect para enviar TON
-    // Por enquanto, vamos simular
 
     const transaction = new Transaction({
       userId,
@@ -425,7 +488,6 @@ app.post('/api/transactions/withdraw', authenticateToken, async (req, res) => {
   }
 });
 
-// Rota para buscar transações
 app.get('/api/transactions', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -437,16 +499,18 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
   }
 });
 
-// Rota de estatísticas
+// ============================================
+// ROTAS DE ESTATÍSTICAS
+// ============================================
+
 app.get('/api/stats', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-
     const user = await User.findById(userId);
     const rangers = await Ranger.find({ userId });
+
     const activeRangers = rangers.filter(r => r.isActive).length;
     const totalRangers = rangers.length;
-
     const totalInvested = rangers.reduce((sum, r) => sum + r.purchasePrice, 0);
     const totalEarned = user.totalEarned;
     const currentBalance = user.balance;
@@ -467,7 +531,259 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================
+// ROTAS DE FARM (50 DIAS)
+// ============================================
+
+app.get('/api/farm/progress/:userId', authenticateToken, async (req, res) => {
+  try {
+    let progress = await FarmProgress.findOne({ userId: req.params.userId });
+
+    if (!progress) {
+      progress = await FarmProgress.create({ userId: req.params.userId });
+    }
+
+    const canCheckIn = () => {
+      if (!progress.isActive || progress.usedFarmTON || progress.daysCompleted >= 50) {
+        return false;
+      }
+
+      if (!progress.lastCheckIn) {
+        return true;
+      }
+
+      const today = new Date().setHours(0, 0, 0, 0);
+      const lastCheckIn = new Date(progress.lastCheckIn).setHours(0, 0, 0, 0);
+
+      return today > lastCheckIn;
+    };
+
+    res.json({
+      success: true,
+      data: {
+        ...progress.toObject(),
+        canCheckIn: canCheckIn(),
+        daysRemaining: 50 - progress.daysCompleted,
+        tonRemaining: parseFloat((2.0 - progress.tonAccumulated).toFixed(2)),
+        progressPercentage: (progress.daysCompleted / 50 * 100).toFixed(1)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/farm/checkin/:userId', authenticateToken, async (req, res) => {
+  try {
+    let progress = await FarmProgress.findOne({ userId: req.params.userId });
+
+    if (!progress) {
+      progress = await FarmProgress.create({ userId: req.params.userId });
+    }
+
+    const canCheckIn = () => {
+      if (!progress.isActive || progress.usedFarmTON || progress.daysCompleted >= 50) {
+        return false;
+      }
+
+      if (!progress.lastCheckIn) {
+        return true;
+      }
+
+      const today = new Date().setHours(0, 0, 0, 0);
+      const lastCheckIn = new Date(progress.lastCheckIn).setHours(0, 0, 0, 0);
+
+      return today > lastCheckIn;
+    };
+
+    if (!canCheckIn()) {
+      let reason = '';
+      if (!progress.isActive) reason = 'Sistema de farm desativado';
+      else if (progress.usedFarmTON) reason = 'TON farmado já foi usado';
+      else if (progress.daysCompleted >= 50) reason = 'Você já completou os 50 dias';
+      else reason = 'Check-in já realizado hoje';
+
+      return res.status(400).json({ success: false, error: reason });
+    }
+
+    progress.daysCompleted += 1;
+    progress.tonAccumulated = parseFloat((progress.tonAccumulated + 0.04).toFixed(2));
+    progress.lastCheckIn = new Date();
+
+    progress.checkInHistory.push({
+      day: progress.daysCompleted,
+      date: new Date(),
+      tonEarned: 0.04
+    });
+
+    await progress.save();
+
+    res.json({
+      success: true,
+      message: `🎉 Check-in dia ${progress.daysCompleted} realizado com sucesso!`,
+      data: {
+        daysCompleted: progress.daysCompleted,
+        tonAccumulated: progress.tonAccumulated,
+        daysRemaining: 50 - progress.daysCompleted,
+        tonRemaining: parseFloat((2.0 - progress.tonAccumulated).toFixed(2)),
+        canBuyChest: progress.tonAccumulated >= 2.0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/farm/use-farm-ton/:userId', authenticateToken, async (req, res) => {
+  try {
+    const progress = await FarmProgress.findOne({ userId: req.params.userId });
+
+    if (!progress) {
+      return res.status(404).json({ success: false, error: 'Progresso não encontrado' });
+    }
+
+    if (progress.tonAccumulated < 2.0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'TON insuficiente. Você precisa de 2 TON.' 
+      });
+    }
+
+    if (progress.usedFarmTON) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'TON farmado já foi usado anteriormente.' 
+      });
+    }
+
+    progress.usedFarmTON = true;
+    progress.isActive = false;
+    progress.deactivatedAt = new Date();
+    await progress.save();
+
+    res.json({
+      success: true,
+      message: '✅ TON farmado usado com sucesso! Sistema de farm desativado.',
+      data: {
+        usedFarmTON: true,
+        isActive: false,
+        deactivatedAt: progress.deactivatedAt
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/farm/history/:userId', authenticateToken, async (req, res) => {
+  try {
+    const progress = await FarmProgress.findOne({ userId: req.params.userId });
+
+    if (!progress) {
+      return res.status(404).json({ success: false, error: 'Progresso não encontrado' });
+    }
+
+    res.json({
+      success: true,
+      data: progress.checkInHistory
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// ROTAS DE ESTATÍSTICAS GLOBAIS
+// ============================================
+
+app.get('/api/stats/global', async (req, res) => {
+  try {
+    let stats = await GlobalStats.findOne();
+
+    if (!stats) {
+      stats = await GlobalStats.create({
+        totalChestsSold: 0,
+        chestsSoldByType: {
+          cadete: 0,
+          explorador: 0,
+          comandante: 0,
+          elite: 0,
+          estelar: 0,
+          cosmico: 0
+        },
+        totalRevenue: 0,
+        totalFees: 0
+      });
+    }
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/stats/increment-sale', async (req, res) => {
+  try {
+    const { chestType, price } = req.body;
+
+    if (!chestType || !price) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'chestType e price são obrigatórios' 
+      });
+    }
+
+    let stats = await GlobalStats.findOne();
+
+    if (!stats) {
+      stats = await GlobalStats.create({
+        totalChestsSold: 0,
+        chestsSoldByType: {
+          cadete: 0,
+          explorador: 0,
+          comandante: 0,
+          elite: 0,
+          estelar: 0,
+          cosmico: 0
+        },
+        totalRevenue: 0,
+        totalFees: 0
+      });
+    }
+
+    stats.totalChestsSold += 1;
+    stats.chestsSoldByType[chestType] += 1;
+    stats.totalRevenue += price;
+    stats.totalFees += price * 0.01;
+    stats.lastUpdated = new Date();
+
+    await stats.save();
+
+    res.json({
+      success: true,
+      message: 'Estatísticas atualizadas',
+      data: stats
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// HEALTH CHECK
+// ============================================
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Cosmic TON Rangers API is running!' });
+});
+
+// ============================================
+// INICIAR SERVIDOR
+// ============================================
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
